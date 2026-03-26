@@ -155,6 +155,7 @@ def _build_description(
     method: str,
     path: str,
     operation: dict,
+    components: dict | None = None,
     conditions: dict[str, str] | None = None,
 ) -> str:
     """Build tool description from OpenAPI operation."""
@@ -162,23 +163,48 @@ def _build_description(
     desc = operation.get('description', '')
     text = desc or summary or f'{method.upper()} {path}'
 
-    # Add parameter hints
-    params = operation.get('parameters', [])
-    if params:
-        param_lines = []
-        for p in params:
-            name = p['name']
-            schema = p.get('schema', {})
-            p_type = schema.get('type', '')
-            if 'anyOf' in schema:
-                for v in schema['anyOf']:
+    # Collect all fields with required/optional markers
+    fields: list[str] = []
+
+    # Query/path parameters
+    for p in operation.get('parameters', []):
+        name = p['name']
+        schema = p.get('schema', {})
+        p_type = schema.get('type', '')
+        if 'anyOf' in schema:
+            for v in schema['anyOf']:
+                if v.get('type') != 'null':
+                    p_type = v.get('type', '')
+                    break
+        marker = ' (required)' if p.get('required') else ''
+        default = f', default: {schema["default"]}' if 'default' in schema else ''
+        fields.append(f'  {name}: {p_type}{marker}{default}')
+
+    # Request body fields
+    body_content = operation.get('requestBody', {}).get('content', {})
+    for mime, spec in body_content.items():
+        body_schema = spec.get('schema', {})
+        if '$ref' in body_schema and components:
+            body_schema = _resolve_ref(body_schema['$ref'], components or {})
+
+        body_required = set(body_schema.get('required', []))
+        for name, field in body_schema.get('properties', {}).items():
+            f_type = field.get('type', '')
+            if 'anyOf' in field:
+                for v in field['anyOf']:
                     if v.get('type') != 'null':
-                        p_type = v.get('type', '')
+                        f_type = v.get('type', '')
                         break
-            required = ' (required)' if p.get('required') else ''
-            param_lines.append(f'  {name}: {p_type}{required}')
-        if param_lines:
-            text += '\n\nParameters:\n' + '\n'.join(param_lines)
+            if not f_type:
+                f_type = 'string'
+            marker = ' (required)' if name in body_required else ''
+            default = f', default: {field["default"]}' if 'default' in field else ''
+            enum = f', options: {field["enum"]}' if 'enum' in field else ''
+            fields.append(f'  {name}: {f_type}{marker}{default}{enum}')
+        break
+
+    if fields:
+        text += '\n\nFields:\n' + '\n'.join(fields)
 
     # Add permission condition limits
     if conditions:
@@ -276,7 +302,8 @@ def register_openapi_tools(
                 )
 
             description = _build_description(
-                method, path, operation, conditions or None
+                method, path, operation, components,
+                conditions or None,
             )
             input_schema = _build_input_schema(operation, components)
 
