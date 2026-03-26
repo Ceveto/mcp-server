@@ -5,13 +5,20 @@ from pydantic_settings import BaseSettings
 
 class MCPConfig(BaseSettings):
     base_url: str = 'https://app.ceveto.com'
-    username: str  # API user username (X-API-Key value)
-    private_key: str  # Ed25519 private key, hex-encoded (64 chars)
-    default_account: str = ''  # Optional slug/UUID for default account
-    transport: str = 'stdio'  # stdio or sse
-    port: int = 8500  # SSE mode port
-    # Comma-separated list of OpenAPI tags to include as tools.
-    # Empty = all tags. Example: "Contacts,Tasks,Locations"
-    modules: str = ''
+    username: str | None = None  # Optional for hosted mode
+    private_key: str | None = None  # Optional for hosted mode
+    default_account: str = ''
+    transport: str = 'stdio'  # stdio, sse, or streamable-http
+    port: int = 8500
+    modules: str = ''  # Comma-separated OpenAPI tags
+    hosted_mode: bool = False  # Multi-tenant per-session auth
 
     model_config = {'env_prefix': 'CEVETO_MCP_'}
+
+    def validate_credentials(self) -> None:
+        """Raise if credentials missing in stdio mode."""
+        if not self.hosted_mode and (not self.username or not self.private_key):
+            raise ValueError(
+                'CEVETO_MCP_USERNAME and CEVETO_MCP_PRIVATE_KEY '
+                'are required for stdio mode'
+            )

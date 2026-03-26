@@ -192,9 +192,9 @@ def _build_description(
 
 def register_openapi_tools(
     server: FastMCP,
-    api: CevetoAPIClient,
     schema: dict,
     *,
+    api: CevetoAPIClient | None = None,
     prefix: str = '/api/',
     allowed_tags: set[str] | None = None,
     permissions: dict | None = None,
@@ -286,13 +286,13 @@ def register_openapi_tools(
             # Register the tool
             _register_dynamic_tool(
                 server=server,
-                api=api,
                 tool_name=tool_name,
                 description=description,
                 input_schema=input_schema,
                 method=method,
                 path_template=path,
                 path_params=path_params,
+                static_api=api,
             )
             count += 1
 
@@ -302,34 +302,40 @@ def register_openapi_tools(
 def _register_dynamic_tool(
     *,
     server: FastMCP,
-    api: CevetoAPIClient,
     tool_name: str,
     description: str,
     input_schema: dict,
     method: str,
     path_template: str,
     path_params: list[str],
+    static_api: CevetoAPIClient | None = None,
 ) -> None:
-    """Register a single dynamic tool on the MCP server."""
+    """Register a single dynamic tool on the MCP server.
+
+    In stdio mode, static_api is set. In hosted mode, the client
+    is resolved per-session from session state.
+    """
 
     @server.tool(name=tool_name, description=description)
     async def dynamic_tool(**kwargs: str) -> str:
+        from ceveto_mcp.session import get_session_state
+
+        # Resolve client: session state (hosted) or static (stdio)
+        state = get_session_state()
+        api = state.api_client if state else static_api
+        if not api:
+            return json.dumps({'error': 'Not authenticated'})
+
         # Build path with path parameters
         path = path_template
         for pp in path_params:
             if pp in kwargs:
                 path = path.replace(f'{{{pp}}}', str(kwargs.pop(pp)))
 
-        # Separate query params from body
-        query_params = {}
-        body_data = {}
-
-        # Properties from input schema tell us what's a query param
-        props = input_schema.get('properties', {})
-        for key, value in kwargs.items():
-            if value is None:
-                continue
-            query_params[key] = value
+        # Query params for GET, body for mutations
+        query_params = {
+            k: v for k, v in kwargs.items() if v is not None
+        }
 
         result: dict
         if method == 'get':

@@ -1,4 +1,4 @@
-"""Ceveto MCP server — dynamic tools from OpenAPI schema."""
+"""Ceveto MCP server — dual mode: stdio (single-user) and hosted (multi-tenant)."""
 
 from __future__ import annotations
 
@@ -17,63 +17,58 @@ def create_server(
     config: MCPConfig,
     preloaded: dict | None = None,
 ) -> FastMCP:
-    """Create MCP server with tools from OpenAPI schema.
+    """Create MCP server in stdio or hosted mode."""
+    if config.hosted_mode:
+        return _create_hosted_server(config, preloaded)
+    return _create_stdio_server(config, preloaded)
 
-    Args:
-        config: MCP configuration.
-        preloaded: Optional dict with 'schema' and 'me' keys,
-            fetched before server starts. If None, only meta tools
-            are available (dynamic loading still works via load_api_tools).
-    """
+
+# ---------------------------------------------------------------------------
+# Stdio mode (single user, credentials from env)
+# ---------------------------------------------------------------------------
+
+
+def _create_stdio_server(
+    config: MCPConfig, preloaded: dict | None
+) -> FastMCP:
     api = CevetoAPIClient(
-        config.base_url, config.username, config.private_key
+        config.base_url, config.username or '', config.private_key or ''
     )
     if config.default_account:
         api.set_default_account(config.default_account)
 
     server = FastMCP(name='ceveto-api')
+    _register_meta_tools(server, static_api=api)
 
-    _register_meta_tools(server, api)
-
-    # Register API tools from preloaded OpenAPI schema
     if preloaded:
-        _register_preloaded_tools(
-            server, api, config, preloaded
-        )
+        _register_stdio_tools(server, api, config, preloaded)
     else:
         print(
-            'Warning: No preloaded schema — only meta tools available.',
+            'Warning: No preloaded schema — only meta tools.',
             file=sys.stderr,
         )
 
     return server
 
 
-def _register_preloaded_tools(
+def _register_stdio_tools(
     server: FastMCP,
     api: CevetoAPIClient,
     config: MCPConfig,
     preloaded: dict,
 ) -> None:
-    """Register API tools from preloaded OpenAPI schema + permissions."""
     schema = preloaded['schema']
     me = preloaded['me']
 
     permissions = me.get('permissions', {})
     is_owner = me.get('is_owner', False)
-
-    # Determine allowed tags from permissions
     permitted_tags = get_allowed_tags(permissions, is_owner=is_owner)
 
-    # Filter by configured modules
     allowed_tags = None
     if config.modules:
         allowed_tags = {
-            t.strip()
-            for t in config.modules.split(',')
-            if t.strip()
+            t.strip() for t in config.modules.split(',') if t.strip()
         }
-        # Intersect with permitted tags
         if permitted_tags is not None:
             allowed_tags = allowed_tags & permitted_tags
     elif permitted_tags is not None:
@@ -81,20 +76,58 @@ def _register_preloaded_tools(
 
     count = register_openapi_tools(
         server,
-        api,
         schema,
+        api=api,
         prefix='/api/',
         allowed_tags=allowed_tags,
         permissions=permissions,
         is_owner=is_owner,
     )
+    print(f'Registered {count} API tools.', file=sys.stderr)
 
-    print(f'Registered {count} API tools from OpenAPI schema.', file=sys.stderr)
+
+# ---------------------------------------------------------------------------
+# Hosted mode (multi-tenant, per-session credentials)
+# ---------------------------------------------------------------------------
+
+
+def _create_hosted_server(
+    config: MCPConfig, preloaded: dict | None
+) -> FastMCP:
+    server = FastMCP(name='ceveto-api')
+    _register_meta_tools(server, static_api=None)
+
+    if preloaded and 'schema' in preloaded:
+        # Register all tools without static api — client resolved per-session
+        count = register_openapi_tools(
+            server,
+            preloaded['schema'],
+            api=None,
+            prefix='/api/',
+        )
+        print(
+            f'Hosted mode: registered {count} tools (auth per-session).',
+            file=sys.stderr,
+        )
+
+    return server
+
+
+# ---------------------------------------------------------------------------
+# Meta tools (work in both modes)
+# ---------------------------------------------------------------------------
 
 
 def _register_meta_tools(
-    server: FastMCP, api: CevetoAPIClient
+    server: FastMCP,
+    static_api: CevetoAPIClient | None = None,
 ) -> None:
+    def _resolve_api() -> CevetoAPIClient | None:
+        from ceveto_mcp.session import get_session_state
+
+        state = get_session_state()
+        return state.api_client if state else static_api
+
     @server.tool()
     async def whoami() -> str:
         """Show the current API user's identity, active account, and permissions.
@@ -102,6 +135,9 @@ def _register_meta_tools(
         Use this first to understand which account you're operating on
         and what permissions are available.
         """
+        api = _resolve_api()
+        if not api:
+            return json.dumps({'error': 'Not authenticated'})
         return json.dumps(
             await api.get('/company-api/me/'), indent=2, default=str
         )
@@ -113,6 +149,9 @@ def _register_meta_tools(
         Each entry includes the account id, name, slug, and whether
         the API user is an owner.
         """
+        api = _resolve_api()
+        if not api:
+            return json.dumps({'error': 'Not authenticated'})
         return json.dumps(
             await api.get('/company-api/me/accounts/'),
             indent=2,
@@ -126,5 +165,8 @@ def _register_meta_tools(
         Args:
             account: Account slug (e.g. "acme-corp") or UUID.
         """
+        api = _resolve_api()
+        if not api:
+            return json.dumps({'error': 'Not authenticated'})
         api.set_default_account(account)
         return f'Default account set to: {account}'
