@@ -94,7 +94,11 @@ def _register_stdio_tools(
 def _create_hosted_server(
     config: MCPConfig, preloaded: dict | None
 ) -> FastMCP:
-    server = FastMCP(name='ceveto-api')
+    server = FastMCP(
+        name='ceveto-api',
+        host='0.0.0.0',
+        port=config.port,
+    )
 
     _register_hosted_auth_tool(server, config.base_url)
     _register_meta_tools(server, static_api=None)
