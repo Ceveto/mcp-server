@@ -95,10 +95,11 @@ def _create_hosted_server(
     config: MCPConfig, preloaded: dict | None
 ) -> FastMCP:
     server = FastMCP(name='ceveto-api')
+
+    _register_hosted_auth_tool(server, config.base_url)
     _register_meta_tools(server, static_api=None)
 
     if preloaded and 'schema' in preloaded:
-        # Register all tools without static api — client resolved per-session
         count = register_openapi_tools(
             server,
             preloaded['schema'],
@@ -111,6 +112,50 @@ def _create_hosted_server(
         )
 
     return server
+
+
+def _register_hosted_auth_tool(
+    server: FastMCP, base_url: str
+) -> None:
+    """Register connect tool for hosted mode authentication."""
+
+    @server.tool()
+    async def connect(access_token: str) -> str:
+        """Authenticate with an OAuth access token.
+
+        Call this first in hosted mode. Get a token from the OAuth flow
+        at /oauth/authorize, then pass it here.
+
+        Args:
+            access_token: OAuth Bearer access token from Ceveto.
+        """
+        from ceveto_mcp.client import CevetoOAuthClient
+        from ceveto_mcp.session import SessionState, set_session_state
+
+        api = CevetoOAuthClient(base_url, access_token)
+
+        try:
+            me = await api.get('/company-api/me/')
+        except Exception:
+            return json.dumps({'error': 'Invalid or expired access token'})
+
+        set_session_state(
+            SessionState(
+                api_client=api,
+                permissions=me.get('permissions', {}),
+                is_owner=me.get('is_owner', False),
+            )
+        )
+
+        return json.dumps(
+            {
+                'status': 'connected',
+                'account': me.get('account_name', ''),
+                'account_slug': me.get('account_slug', ''),
+                'is_owner': me.get('is_owner', False),
+            },
+            indent=2,
+        )
 
 
 # ---------------------------------------------------------------------------
