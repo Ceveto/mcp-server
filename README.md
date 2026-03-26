@@ -19,7 +19,7 @@ Add to your `.mcp.json`:
       "command": "uvx",
       "args": ["--from", "git+https://github.com/Ceveto/mcp-server", "ceveto-mcp"],
       "env": {
-        "CEVETO_MCP_BASE_URL": "https://app.ceveto.com",
+        "CEVETO_MCP_BASE_URL": "https://api.ceveto.com",
         "CEVETO_MCP_USERNAME": "<your-api-username>",
         "CEVETO_MCP_PRIVATE_KEY": "<your-api-private-key>"
       }
@@ -43,7 +43,7 @@ Or install the [Ceveto Claude Plugin](https://github.com/Ceveto/claude-plugin) f
 |----------|----------|---------|-------------|
 | `CEVETO_MCP_USERNAME` | Yes | — | API user username |
 | `CEVETO_MCP_PRIVATE_KEY` | Yes | — | Ed25519 private key (hex) |
-| `CEVETO_MCP_BASE_URL` | No | `https://app.ceveto.com` | API base URL |
+| `CEVETO_MCP_BASE_URL` | No | `https://api.ceveto.com` | API base URL |
 | `CEVETO_MCP_DEFAULT_ACCOUNT` | No | — | Default account slug/UUID |
 | `CEVETO_MCP_MODULES` | No | — | Comma-separated OpenAPI tags to filter |
 | `CEVETO_MCP_TRANSPORT` | No | `stdio` | Transport: `stdio` or `sse` |
@@ -63,7 +63,7 @@ docker build -t ceveto-mcp .
 docker run -p 8500:8500 \
   -e CEVETO_MCP_USERNAME=... \
   -e CEVETO_MCP_PRIVATE_KEY=... \
-  -e CEVETO_MCP_BASE_URL=https://app.ceveto.com \
+  -e CEVETO_MCP_BASE_URL=https://api.ceveto.com \
   ceveto-mcp
 ```
 
@@ -71,8 +71,8 @@ docker run -p 8500:8500 \
 
 | Environment | MCP Server | Backend API |
 |-------------|-----------|-------------|
-| Production | `https://mcp.ceveto.com` | `https://app.ceveto.com` |
-| Staging | `https://mcp.ceveto.dev` | `https://app.ceveto.dev` |
+| Production | `https://mcp.ceveto.com` | `https://api.ceveto.com` |
+| Staging | `https://mcp.ceveto.dev` | `https://api.ceveto.dev` |
 
 Hosted mode (multi-tenant, no credentials needed on server):
 

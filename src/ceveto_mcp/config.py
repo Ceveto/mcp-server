@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class MCPConfig(BaseSettings):
-    base_url: str = 'https://app.ceveto.com'
+    base_url: str = 'https://api.ceveto.com'
     username: str | None = None  # Optional for hosted mode
     private_key: str | None = None  # Optional for hosted mode
     default_account: str = ''
