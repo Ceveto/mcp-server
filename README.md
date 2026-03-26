@@ -67,9 +67,23 @@ docker run -p 8500:8500 \
   ceveto-mcp
 ```
 
+## Hosted Instances
+
+| Environment | MCP Server | Backend API |
+|-------------|-----------|-------------|
+| Production | `https://mcp.ceveto.com` | `https://app.ceveto.com` |
+| Staging | `https://mcp.ceveto.dev` | `https://app.ceveto.dev` |
+
+Hosted mode (multi-tenant, no credentials needed on server):
+
+```bash
+ceveto-mcp --hosted --transport sse --port 8500
+```
+
 ## Security
 
 - **Ed25519 signatures** — every API request is cryptographically signed
+- **OAuth 2.1** — browser-based authorization with PKCE
 - **Permission-filtered tools** — only endpoints you have access to become tools
 - **Method-level filtering** — read-only keys don't see write operations
 - **No secrets stored** — credentials only in environment variables
