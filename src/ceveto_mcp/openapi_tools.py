@@ -326,28 +326,35 @@ def _register_dynamic_tool(
         if not api:
             return json.dumps({'error': 'Not authenticated'})
 
+        # FastMCP may pass all args as a single "kwargs" JSON string
+        if 'kwargs' in kwargs and len(kwargs) == 1:
+            raw = kwargs['kwargs']
+            if isinstance(raw, str):
+                try:
+                    kwargs = json.loads(raw)
+                except json.JSONDecodeError:
+                    pass
+
         # Build path with path parameters
         path = path_template
         for pp in path_params:
             if pp in kwargs:
                 path = path.replace(f'{{{pp}}}', str(kwargs.pop(pp)))
 
-        # Query params for GET, body for mutations
-        query_params = {
-            k: v for k, v in kwargs.items() if v is not None
-        }
+        # Clean None values
+        params = {k: v for k, v in kwargs.items() if v is not None}
 
         result: dict
         if method == 'get':
-            result = await api.get(path, query_params or None)
+            result = await api.get(path, params or None)
         elif method == 'delete':
             result = await api.delete(path)
         elif method == 'post':
-            result = await api.post(path, kwargs)
+            result = await api.post(path, params)
         elif method == 'put':
-            result = await api.put(path, kwargs)
+            result = await api.put(path, params)
         elif method == 'patch':
-            result = await api.patch(path, kwargs)
+            result = await api.patch(path, params)
         else:
             result = {'error': f'Unsupported method: {method}'}
 
