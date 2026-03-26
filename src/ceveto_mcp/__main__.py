@@ -67,10 +67,13 @@ def main() -> None:
     port = args.port or config.port
     server = create_server(config, preloaded=preloaded)
 
+    server.settings.port = port
+    server.settings.host = '0.0.0.0'
+
     if transport == 'streamable-http':
         server.run(transport='streamable-http')
     elif transport == 'sse':
-        server.run(transport='sse', host='0.0.0.0', port=port)  # type: ignore[call-arg]
+        server.run(transport='sse')
     else:
         server.run(transport='stdio')
 
